@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.cargostowing"
-        minSdk = 26 // Diubah dari 24 ke 26 untuk mendukung Apache POI
+        minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -26,7 +26,6 @@ android {
         }
     }
     compileOptions {
-        // Mengaktifkan fitur desugaring Java 8+
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -40,10 +39,19 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+        }
+    }
 }
 
 dependencies {
-    // Desugaring dependency
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
