@@ -1,5 +1,8 @@
 package com.example.cargostowing.ui
 
+import java.net.URLEncoder
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -8,7 +11,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
 import com.example.cargostowing.data.CargoDao
 import com.example.cargostowing.data.CargoItemEntity
 import kotlinx.coroutines.flow.Flow
@@ -17,8 +22,11 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object CargoInput : Screen("cargo_input")
-    object StowingChecklist : Screen("stowing_checklist/{manifestNo}") {
-        fun createRoute(manifestNo: String) = "stowing_checklist/$manifestNo"
+    object StowingChecklist : Screen("stowing_checklist?manifestNo={manifestNo}") {
+        fun createRoute(manifestNo: String): String {
+            val encoded = URLEncoder.encode(manifestNo, StandardCharsets.UTF_8.toString())
+            return "stowing_checklist?manifestNo=$encoded"
+        }
     }
 }
 
@@ -52,8 +60,21 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
             })
         }
 
-        composable(Screen.StowingChecklist.route) { backStackEntry ->
-            val manifestNo = backStackEntry.arguments?.getString("manifestNo") ?: defaultManifestNo
+        composable(
+            route = Screen.StowingChecklist.route,
+            arguments = listOf(
+                navArgument("manifestNo") {
+                    type = NavType.StringType
+                    defaultValue = defaultManifestNo
+                }
+            )
+        ) { backStackEntry ->
+            val rawManifestNo = backStackEntry.arguments?.getString("manifestNo") ?: defaultManifestNo
+            val manifestNo = try {
+                URLDecoder.decode(rawManifestNo, StandardCharsets.UTF_8.toString())
+            } catch (e: Exception) {
+                rawManifestNo
+            }
             val items by viewModel.getCargoItems(manifestNo).collectAsState(initial = emptyList())
             StowingChecklistScreen(
                 manifestNo = manifestNo,
