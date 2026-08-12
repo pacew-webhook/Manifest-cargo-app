@@ -45,7 +45,8 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
         val existing = dao.findCargoByDescAndCustomer(
             manifestNo = item.manifestOwnerNo,
             description = item.description,
-            customerName = item.customerName
+            customerName = item.customerName,
+            pagNo = item.pagNo
         )
         if (existing != null) {
             val updated = existing.copy(
@@ -116,11 +117,13 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
 @Composable
 fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
     var ptiNo by remember { mutableStateOf("") }
+    var pagNo by remember { mutableStateOf("") }
     var customerName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var pcsStr by remember { mutableStateOf("") }
     var weightStr by remember { mutableStateOf("") }
 
+    val focusPag = remember { FocusRequester() }
     val focusCustomer = remember { FocusRequester() }
     val focusDesc = remember { FocusRequester() }
     val focusPcs = remember { FocusRequester() }
@@ -135,6 +138,7 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
                 CargoItemEntity(
                     manifestOwnerNo = "MYI-KAL/100716/XII/2025",
                     ptiNo = ptiNo.uppercase(),
+                    pagNo = pagNo.uppercase().ifBlank { null },
                     pcsCly = pcs,
                     weightPerPcs = null,
                     subTotalWeight = weight,
@@ -161,8 +165,22 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
                     capitalization = KeyboardCapitalization.Characters,
                     imeAction = ImeAction.Next
                 ),
-                keyboardActions = KeyboardActions(onNext = { focusCustomer.requestFocus() }),
+                keyboardActions = KeyboardActions(onNext = { focusPag.requestFocus() }),
                 modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = pagNo,
+                onValueChange = { pagNo = it.uppercase() },
+                label = { Text("No. PAG (Opsional)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(onNext = { focusCustomer.requestFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusPag)
             )
             OutlinedTextField(
                 value = customerName,
