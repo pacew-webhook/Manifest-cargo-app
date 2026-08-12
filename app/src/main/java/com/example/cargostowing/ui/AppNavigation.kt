@@ -4,18 +4,26 @@ import java.net.URLEncoder
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
@@ -42,19 +50,16 @@ sealed class Screen(val route: String) {
 
 class CargoViewModel(private val dao: CargoDao) : ViewModel() {
 
-    // Channel untuk mengirim event/pesan error satu kali ke UI
     private val _uiEvent = MutableSharedFlow<String>()
     val uiEvent = _uiEvent.asSharedFlow()
 
     fun getCargoItems(manifestNo: String): Flow<List<CargoItemEntity>> = dao.getCargoByManifest(manifestNo)
 
-    // REVISI LOGIKA: Validasi data duplikat dengan No. PTI berbeda
     fun insertCargo(item: CargoItemEntity, onSuccess: () -> Unit) = viewModelScope.launch {
         val cleanDesc = item.description.trim()
         val cleanCust = item.customerName.trim()
         val cleanPag = item.pagNo?.trim()
 
-        // Cari apakah sudah ada barang dengan Deskripsi, Customer, dan PAG yang sama
         val duplicateItem = dao.findCargoByDescAndCustomer(
             manifestNo = item.manifestOwnerNo,
             description = cleanDesc,
@@ -63,10 +68,8 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
         )
 
         if (duplicateItem != null && !duplicateItem.ptiNo.equals(item.ptiNo.trim(), ignoreCase = true)) {
-            // Jika data sama tetapi No. PTI beda, batalkan simpan dan kirim pesan error
             _uiEvent.emit("Gagal Simpan: Barang ($cleanDesc) untuk customer ($cleanCust) sudah terdaftar dengan No. PTI (${duplicateItem.ptiNo})!")
         } else {
-            // Jika validasi lolos, simpan data dan jalankan callback success
             dao.insertCargo(item)
             onSuccess()
         }
@@ -78,6 +81,10 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
 
     fun updateStowStatus(id: Long, isStowed: Boolean) = viewModelScope.launch {
         dao.updateStowStatus(id, isStowed)
+    }
+
+    fun deleteCargoItem(item: CargoItemEntity) = viewModelScope.launch {
+        dao.deleteCargo(item)
     }
 }
 
@@ -104,7 +111,7 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
                 existingItems = items,
                 viewModel = viewModel,
                 onSaveSuccess = {
-                    navController.popBackStack()
+                    // Berada tetap di halaman untuk lanjut input/melihat list
                 }
             )
         }
@@ -145,7 +152,6 @@ fun CargoInputScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Dengerin event pesan peringatan/error dari ViewModel
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { errorMessage ->
             snackbarHostState.showSnackbar(
@@ -155,7 +161,6 @@ fun CargoInputScreen(
         }
     }
 
-    // Logika Otomatisasi Nomor Urut PTI Terakhir
     val autoPtiNumber = remember(existingItems) {
         if (existingItems.isEmpty()) {
             "001"
@@ -181,6 +186,13 @@ fun CargoInputScreen(
     val focusPcs = remember { FocusRequester() }
     val focusWeight = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+
+    val clearFields = {
+        pagNo = ""
+        description = ""
+        pcsStr = ""
+        weightStr = ""
+    }
 
     val submitAction = {
         val pcs = pcsStr.toIntOrNull() ?: 0
@@ -212,7 +224,10 @@ fun CargoInputScreen(
                 customerName = customerName.trim().uppercase()
             )
 
-            viewModel.insertCargo(newItem, onSuccess = onSaveSuccess)
+            viewModel.insertCargo(newItem, onSuccess = {
+                clearFields()
+                onSaveSuccess()
+            })
         }
     }
 
@@ -220,135 +235,216 @@ fun CargoInputScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = { TopAppBar(title = { Text("Input Cargo Baru") }) }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedTextField(
-                value = ptiNo,
-                onValueChange = { input ->
-                    ptiNo = input.uppercase()
+            item {
+                OutlinedTextField(
+                    value = ptiNo,
+                    onValueChange = { input ->
+                        ptiNo = input.uppercase()
 
-                    val cleanInputPti = if (input.uppercase().startsWith("KAL")) input.uppercase() else "KAL${input.uppercase()}"
-                    val match = existingItems.find { 
-                        it.ptiNo.equals(cleanInputPti.trim(), ignoreCase = true) ||
-                        it.ptiNo.removePrefix("KAL").equals(input.trim(), ignoreCase = true)
+                        val cleanInputPti = if (input.uppercase().startsWith("KAL")) input.uppercase() else "KAL${input.uppercase()}"
+                        val match = existingItems.find { 
+                            it.ptiNo.equals(cleanInputPti.trim(), ignoreCase = true) ||
+                            it.ptiNo.removePrefix("KAL").equals(input.trim(), ignoreCase = true)
+                        }
+                        if (match != null && customerName.isBlank()) {
+                            customerName = match.customerName
+                        }
+                    },
+                    label = { Text("No. PTI") },
+                    prefix = { Text("KAL") },
+                    placeholder = { Text("001") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { focusPag.requestFocus() }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = pagNo,
+                    onValueChange = { pagNo = it.uppercase() },
+                    label = { Text("No. PAG (Opsional)") },
+                    prefix = { Text("PAG ") },
+                    placeholder = { Text("002 MYI") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { focusCustomer.requestFocus() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusPag)
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = customerName,
+                    onValueChange = { input ->
+                        val upperInput = input.uppercase()
+                        customerName = upperInput
+
+                        val existingCustomer = existingItems.find { 
+                            it.customerName.trim().equals(upperInput.trim(), ignoreCase = true) 
+                        }
+
+                        if (existingCustomer != null) {
+                            ptiNo = existingCustomer.ptiNo.removePrefix("KAL")
+                        } else {
+                            ptiNo = autoPtiNumber
+                        }
+                    },
+                    label = { Text("Nama Customer") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { focusDesc.requestFocus() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusCustomer)
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it.uppercase() },
+                    label = { Text("Deskripsi Barang") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { focusPcs.requestFocus() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusDesc)
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = pcsStr,
+                    onValueChange = { pcsStr = it },
+                    label = { Text("Pcs / Cly") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { focusWeight.requestFocus() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusPcs)
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = weightStr,
+                    onValueChange = { weightStr = it },
+                    label = { Text("Berat Total (Kg)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = {
+                        focusManager.clearFocus()
+                        submitAction()
+                    }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusWeight)
+                )
+            }
+
+            item {
+                Button(
+                    onClick = submitAction,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Simpan Item Cargo") }
+            }
+
+            // DAFTAR ITEM CARGO / CEKLIS STOWING DI BAWAH TOMBOL SIMPAN
+            if (existingItems.isNotEmpty()) {
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Text(
+                        "Daftar Item Cargo / Stowing",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+
+                items(existingItems) { item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Checkbox(
+                                    checked = item.isStowed,
+                                    onCheckedChange = { isChecked ->
+                                        viewModel.updateStowStatus(item.id, isChecked)
+                                    }
+                                )
+                                Column(modifier = Modifier.padding(start = 8.dp)) {
+                                    Text(
+                                        "${item.ptiNo} | ${item.pagNo ?: "TANPA PAG"}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        "${item.customerName} - ${item.description}",
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        "Jumlah: ${item.pcsCly} Pcs",
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${item.subTotalWeight} Kg",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+                                IconButton(onClick = { viewModel.deleteCargoItem(item) }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
                     }
-                    if (match != null && customerName.isBlank()) {
-                        customerName = match.customerName
-                    }
-                },
-                label = { Text("No. PTI") },
-                prefix = { Text("KAL") },
-                placeholder = { Text("001") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(onNext = { focusPag.requestFocus() }),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = pagNo,
-                onValueChange = { pagNo = it.uppercase() },
-                label = { Text("No. PAG (Opsional)") },
-                prefix = { Text("PAG ") },
-                placeholder = { Text("002 MYI") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Characters,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(onNext = { focusCustomer.requestFocus() }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusPag)
-            )
-
-            OutlinedTextField(
-                value = customerName,
-                onValueChange = { input ->
-                    val upperInput = input.uppercase()
-                    customerName = upperInput
-
-                    val existingCustomer = existingItems.find { 
-                        it.customerName.trim().equals(upperInput.trim(), ignoreCase = true) 
-                    }
-
-                    if (existingCustomer != null) {
-                        ptiNo = existingCustomer.ptiNo.removePrefix("KAL")
-                    } else {
-                        ptiNo = autoPtiNumber
-                    }
-                },
-                label = { Text("Nama Customer") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Characters,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(onNext = { focusDesc.requestFocus() }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusCustomer)
-            )
-
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it.uppercase() },
-                label = { Text("Deskripsi Barang") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Characters,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(onNext = { focusPcs.requestFocus() }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusDesc)
-            )
-
-            OutlinedTextField(
-                value = pcsStr,
-                onValueChange = { pcsStr = it },
-                label = { Text("Pcs / Cly") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(onNext = { focusWeight.requestFocus() }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusPcs)
-            )
-
-            OutlinedTextField(
-                value = weightStr,
-                onValueChange = { weightStr = it },
-                label = { Text("Berat Total (Kg)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Decimal,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = {
-                    focusManager.clearFocus()
-                    submitAction()
-                }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusWeight)
-            )
-
-            Button(
-                onClick = submitAction,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Simpan Item Cargo") }
+                }
+            }
         }
     }
 }
