@@ -38,12 +38,29 @@ class CargoExporter(private val context: Context) {
         val row8 = sheet.getRow(8) ?: sheet.createRow(8)
         (row8.getCell(6) ?: row8.createCell(6)).setCellValue(": $flightNo")
 
-        // Grouping berdasarkan Description, Customer, dan No PAG
-        val groupedItems = cargoItems.groupBy {
+        // -------------------------------------------------------------
+        // 1. TULIS SISI MANIFEST (KIRI) - Per Individual PTI / Resi
+        // -------------------------------------------------------------
+        cargoItems.forEachIndexed { i, item ->
+            val rowIndex = 13 + i
+            val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
+
+            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // No.
+            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // PTI
+            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Pcs/Cly
+            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Sub Total Weight
+            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Description
+            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Customer
+        }
+
+        // -------------------------------------------------------------
+        // 2. TULIS SISI STOWING CHECKLIST (KANAN) - Digabung per No. PAG
+        // -------------------------------------------------------------
+        val groupedStowingItems = cargoItems.groupBy {
             Triple(
+                it.pagNo?.uppercase()?.trim() ?: "",
                 it.description.uppercase().trim(),
-                it.customerName.uppercase().trim(),
-                it.pagNo?.uppercase()?.trim() ?: ""
+                it.customerName.uppercase().trim()
             )
         }.map { (_, items) ->
             items.first().copy(
@@ -52,27 +69,26 @@ class CargoExporter(private val context: Context) {
             )
         }
 
-        // Tulis Data Hasil Penggabungan ke Excel
-        groupedItems.forEachIndexed { i, item ->
+        groupedStowingItems.forEachIndexed { i, item ->
             val rowIndex = 13 + i
             val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
 
-            // Sisi Manifest (Kiri)
-            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble())
-            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)
-            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble())
-            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight)
-            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)
-            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)
-
-            // Sisi Stowing Checklist (Kanan) - Dikembalikan ke indeks awal
-            (row.getCell(7) ?: row.createCell(7)).setCellValue((i + 1).toDouble())
+            // Kolom H (NO PAG)
             if (!item.pagNo.isNullOrEmpty()) {
-                (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo)
+                (row.getCell(7) ?: row.createCell(7)).setCellValue(item.pagNo)
+            } else {
+                (row.getCell(7) ?: row.createCell(7)).setCellValue("")
             }
-            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
+
+            // Kolom I (DESCRIPTION)
+            (row.getCell(8) ?: row.createCell(8)).setCellValue(item.description)
+
+            // Kolom J (WEIGHT Net) & K (WEIGHT Gross)
+            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.subTotalWeight)
             (row.getCell(10) ?: row.createCell(10)).setCellValue(item.subTotalWeight)
-            (row.getCell(12) ?: row.createCell(12)).setCellValue(item.customerName)
+
+            // Kolom L (COSTUMERS)
+            (row.getCell(11) ?: row.createCell(11)).setCellValue(item.customerName)
         }
 
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
