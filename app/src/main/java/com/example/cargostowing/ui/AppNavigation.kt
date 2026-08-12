@@ -41,25 +41,12 @@ sealed class Screen(val route: String) {
 class CargoViewModel(private val dao: CargoDao) : ViewModel() {
     fun getCargoItems(manifestNo: String): Flow<List<CargoItemEntity>> = dao.getCargoByManifest(manifestNo)
 
+    // REVISI LOGIKA: Selalu insert sebagai item baru agar data tidak digabung di database / sheet DATA CUSTOMER
     fun insertCargo(item: CargoItemEntity) = viewModelScope.launch {
-        val existing = dao.findCargoByDescAndCustomer(
-            manifestNo = item.manifestOwnerNo,
-            description = item.description.trim(),
-            customerName = item.customerName.trim(),
-            pagNo = item.pagNo?.trim()
-        )
-        if (existing != null) {
-            val updated = existing.copy(
-                pcsCly = existing.pcsCly + item.pcsCly,
-                subTotalWeight = existing.subTotalWeight + item.subTotalWeight
-            )
-            dao.updateCargo(updated)
-        } else {
-            dao.insertCargo(item)
-        }
+        dao.insertCargo(item)
     }
 
-    // Fungsi untuk memperbarui data cargo setelah diedit
+    // Fungsi untuk memperbarui data cargo setelah diedit dari dialog edit
     fun updateCargoItem(item: CargoItemEntity) = viewModelScope.launch {
         dao.updateCargo(item)
     }
