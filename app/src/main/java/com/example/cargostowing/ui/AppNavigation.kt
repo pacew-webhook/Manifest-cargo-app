@@ -59,6 +59,11 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
         }
     }
 
+    // Fungsi untuk memperbarui data cargo setelah diedit
+    fun updateCargoItem(item: CargoItemEntity) = viewModelScope.launch {
+        dao.updateCargo(item)
+    }
+
     fun updateStowStatus(id: Long, isStowed: Boolean) = viewModelScope.launch {
         dao.updateStowStatus(id, isStowed)
     }
@@ -104,10 +109,12 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
                 rawManifestNo
             }
             val items by viewModel.getCargoItems(manifestNo).collectAsState(initial = emptyList())
+            
             StowingChecklistScreen(
                 manifestNo = manifestNo,
                 cargoItems = items,
-                onToggleStow = { item, stowed -> viewModel.updateStowStatus(item.id, stowed) }
+                onToggleStow = { item, stowed -> viewModel.updateStowStatus(item.id, stowed) },
+                onUpdateCargo = { updatedItem -> viewModel.updateCargoItem(updatedItem) }
             )
         }
     }
