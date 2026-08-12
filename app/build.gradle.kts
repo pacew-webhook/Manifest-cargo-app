@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.cargostowing"
-        minSdk = 24
+        minSdk = 26 // Diubah dari 24 ke 26 untuk mendukung Apache POI
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -26,6 +26,8 @@ android {
         }
     }
     compileOptions {
+        // Mengaktifkan fitur desugaring Java 8+
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -41,6 +43,9 @@ android {
 }
 
 dependencies {
+    // Desugaring dependency
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
