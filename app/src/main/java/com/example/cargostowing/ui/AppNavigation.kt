@@ -44,9 +44,9 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
     fun insertCargo(item: CargoItemEntity) = viewModelScope.launch {
         val existing = dao.findCargoByDescAndCustomer(
             manifestNo = item.manifestOwnerNo,
-            description = item.description,
-            customerName = item.customerName,
-            pagNo = item.pagNo
+            description = item.description.trim(),
+            customerName = item.customerName.trim(),
+            pagNo = item.pagNo?.trim()
         )
         if (existing != null) {
             val updated = existing.copy(
@@ -137,13 +137,13 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
             onSave(
                 CargoItemEntity(
                     manifestOwnerNo = "MYI-KAL/100716/XII/2025",
-                    ptiNo = ptiNo.uppercase(),
-                    pagNo = pagNo.uppercase().ifBlank { null },
+                    ptiNo = ptiNo.trim().uppercase(),
+                    pagNo = pagNo.trim().uppercase().ifBlank { null },
                     pcsCly = pcs,
                     weightPerPcs = null,
                     subTotalWeight = weight,
-                    description = description.uppercase(),
-                    customerName = customerName.uppercase()
+                    description = description.trim().uppercase(),
+                    customerName = customerName.trim().uppercase()
                 )
             )
         }
