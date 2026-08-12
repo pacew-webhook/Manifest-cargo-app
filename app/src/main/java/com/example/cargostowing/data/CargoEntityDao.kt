@@ -28,8 +28,8 @@ interface CargoDao {
     @Update
     suspend fun updateCargo(item: CargoItemEntity)
 
-    @Query("SELECT * FROM cargo_items WHERE manifestOwnerNo = :manifestNo AND UPPER(description) = UPPER(:description) AND UPPER(customerName) = UPPER(:customerName) LIMIT 1")
-    suspend fun findCargoByDescAndCustomer(manifestNo: String, description: String, customerName: String): CargoItemEntity?
+    @Query("SELECT * FROM cargo_items WHERE manifestOwnerNo = :manifestNo AND UPPER(description) = UPPER(:description) AND UPPER(customerName) = UPPER(:customerName) AND (COALESCE(UPPER(pagNo), '') = COALESCE(UPPER(:pagNo), '')) LIMIT 1")
+    suspend fun findCargoByDescAndCustomer(manifestNo: String, description: String, customerName: String, pagNo: String?): CargoItemEntity?
 
     @Query("UPDATE cargo_items SET isStowed = :isStowed WHERE id = :id")
     suspend fun updateStowStatus(id: Long, isStowed: Boolean)
