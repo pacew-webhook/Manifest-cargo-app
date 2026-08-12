@@ -65,13 +65,14 @@ class CargoExporter(private val context: Context) {
             (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)
             (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)
 
-            // Sisi Stowing Checklist (Kanan)
+            // Sisi Stowing Checklist (Kanan) - Dikembalikan ke indeks awal
+            (row.getCell(7) ?: row.createCell(7)).setCellValue((i + 1).toDouble())
             if (!item.pagNo.isNullOrEmpty()) {
-                (row.getCell(7) ?: row.createCell(7)).setCellValue(item.pagNo)
+                (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo)
             }
-            (row.getCell(8) ?: row.createCell(8)).setCellValue(item.description)
-            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.subTotalWeight)
-            (row.getCell(11) ?: row.createCell(11)).setCellValue(item.customerName)
+            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
+            (row.getCell(10) ?: row.createCell(10)).setCellValue(item.subTotalWeight)
+            (row.getCell(12) ?: row.createCell(12)).setCellValue(item.customerName)
         }
 
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
