@@ -25,12 +25,9 @@ class CargoExporter(private val context: Context) {
             XSSFWorkbook()
         }
 
-        // =================================================================
-        // 1. SHEET "Manifest" (DATA DIGABUNG BILA PTI & CUSTOMER SAMA)
-        // =================================================================
         val sheet = workbook.getSheet("Manifest") ?: workbook.getSheetAt(0)
 
-        // Header Manifest & Flight Info
+        // Header Info
         val row7 = sheet.getRow(6) ?: sheet.createRow(6)
         (row7.getCell(0) ?: row7.createCell(0)).setCellValue(manifestNo)
 
@@ -41,9 +38,7 @@ class CargoExporter(private val context: Context) {
         val row9 = sheet.getRow(8) ?: sheet.createRow(8)
         (row9.getCell(6) ?: row9.createCell(6)).setCellValue(": $flightNo")
 
-        // -----------------------------------------------------------------
         // 1. MANIFEST CARGO (SISI KIRI) - Digabung per PTI & Customer
-        // -----------------------------------------------------------------
         val groupedManifestItems = cargoItems.groupBy {
             Triple(
                 it.ptiNo.trim().uppercase(),
@@ -62,26 +57,24 @@ class CargoExporter(private val context: Context) {
             val rowIndex = 13 + i
             val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
 
-            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Kolom A: No
-            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Kolom B: PTI
-            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Kolom C: Pcs/Cly
-            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Weight Sub Total
-            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Kolom F: DESCRIPTION
-            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Kolom G: COSTUMERS
+            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble())
+            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)
+            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble())
+            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight)
+            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)
+            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)
         }
 
-        // -----------------------------------------------------------------
-        // 2. STOWING CHECKLIST (SISI KANAN) - Memisah Baris Jika Nomor PAG Beda
-        // -----------------------------------------------------------------
+        // 2. STOWING CHECKLIST (SISI KANAN) - DIGABUNGKAN PER NO. PAG SAMA
         val groupedStowingItems = cargoItems.groupBy {
-            Triple(
-                it.pagNo?.trim()?.uppercase() ?: "",
-                it.description.trim().uppercase(),
-                it.customerName.trim().uppercase()
-            )
-        }.map { (_, items) ->
+            it.pagNo?.trim()?.uppercase() ?: "TANPA PAG"
+        }.map { (pag, items) ->
             val first = items.first()
+            // Menggabungkan seluruh deskripsi unik yang masuk dalam PAG yang sama
+            val combinedDesc = items.map { it.description.trim() }.distinct().joinToString(", ")
             first.copy(
+                pagNo = if (pag == "TANPA PAG") null else pag,
+                description = combinedDesc,
                 pcsCly = items.sumOf { it.pcsCly },
                 subTotalWeight = items.sumOf { it.subTotalWeight }
             )
@@ -91,25 +84,23 @@ class CargoExporter(private val context: Context) {
             val rowIndex = 13 + i
             val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
 
-            // Kolom I (Index 8) : NO PAG
+            // Kolom I : NO PAG
             (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo ?: "")
 
-            // Kolom J (Index 9) : DESCRIPTION
+            // Kolom J : DESCRIPTION
             (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
 
-            // Kolom K (Index 10): WEIGHT Net
+            // Kolom K : WEIGHT Net
             (row.getCell(10) ?: row.createCell(10)).setCellValue(item.subTotalWeight)
 
-            // Kolom L (Index 11): WEIGHT Gross
+            // Kolom L : WEIGHT Gross
             (row.getCell(11) ?: row.createCell(11)).setCellValue(item.subTotalWeight)
 
-            // Kolom M (Index 12): COSTUMERS
+            // Kolom M : COSTUMERS
             (row.getCell(12) ?: row.createCell(12)).setCellValue(item.customerName)
         }
 
-        // =================================================================
-        // 3. SHEET "DATA CUSTOMER" (DATA DIPISAH PER INPUTAN ASLI)
-        // =================================================================
+        // 3. SHEET "DATA CUSTOMER" (DETAIL ASLI TANPA DIGABUNG)
         val customerSheet = try {
             workbook.getSheet("DATA CUSTOMER") ?: if (workbook.numberOfSheets > 1) workbook.getSheetAt(1) else null
         } catch (e: Exception) {
@@ -117,28 +108,19 @@ class CargoExporter(private val context: Context) {
         }
 
         customerSheet?.let { custSheet ->
-            // Header Info
             val custRow7 = custSheet.getRow(6) ?: custSheet.createRow(6)
             (custRow7.getCell(0) ?: custRow7.createCell(0)).setCellValue(manifestNo)
 
-            val custRow8 = custSheet.getRow(7) ?: custSheet.createRow(7)
-            (custRow8.getCell(2) ?: custRow8.createCell(2)).setCellValue(": $dateStr")
-            (custRow8.getCell(6) ?: custRow8.createCell(6)).setCellValue(": $acReg")
-
-            val custRow9 = custSheet.getRow(8) ?: custSheet.createRow(8)
-            (custRow9.getCell(6) ?: custRow9.createCell(6)).setCellValue(": $flightNo")
-
-            // Detail Per Item ASLI (Tidak Digabung)
             cargoItems.forEachIndexed { i, item ->
                 val rowIndex = 13 + i
                 val row = custSheet.getRow(rowIndex) ?: custSheet.createRow(rowIndex)
 
-                (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Kolom A: No
-                (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Kolom B: PTI
-                (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Kolom C: Pcs/Cly
-                (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Weight Sub Total
-                (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Kolom F: DESCRIPTION
-                (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Kolom G: COSTUMERS
+                (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble())
+                (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)
+                (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble())
+                (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight)
+                (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)
+                (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)
             }
         }
 
@@ -157,8 +139,17 @@ class CargoExporter(private val context: Context) {
 
         canvas.drawText("MANIFEST & STOWING CHECKLIST - $manifestNo", 40f, 50f, paint)
         var y = 90f
-        items.forEach {
-            canvas.drawText("${it.ptiNo} | PAG: ${it.pagNo ?: "-"} | ${it.customerName} | ${it.description} | ${it.subTotalWeight} Kg | Status: ${if (it.isStowed) "STOWED" else "PENDING"}", 40f, y, paint)
+        
+        // Grouping berdasarkan PAG untuk tampilan PDF
+        val groupedPdfItems = items.groupBy { it.pagNo?.trim()?.uppercase() ?: "TANPA PAG" }
+            .map { (pag, list) ->
+                val totalWeight = list.sumOf { it.subTotalWeight }
+                val combinedDesc = list.map { it.description }.distinct().joinToString(", ")
+                "$pag | $combinedDesc | Total Berat: $totalWeight Kg"
+            }
+
+        groupedPdfItems.forEach { line ->
+            canvas.drawText(line, 40f, y, paint)
             y += 20f
         }
 
