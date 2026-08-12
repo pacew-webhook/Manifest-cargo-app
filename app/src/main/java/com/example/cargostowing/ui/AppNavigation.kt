@@ -25,6 +25,8 @@ import androidx.navigation.navArgument
 import com.example.cargostowing.data.CargoDao
 import com.example.cargostowing.data.CargoItemEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -39,14 +41,37 @@ sealed class Screen(val route: String) {
 }
 
 class CargoViewModel(private val dao: CargoDao) : ViewModel() {
+
+    // Channel untuk mengirim event/pesan error satu kali ke UI
+    private val _uiEvent = MutableSharedFlow<String>()
+    val uiEvent = _uiEvent.asSharedFlow()
+
     fun getCargoItems(manifestNo: String): Flow<List<CargoItemEntity>> = dao.getCargoByManifest(manifestNo)
 
-    // REVISI LOGIKA: Selalu insert sebagai item baru agar data tidak digabung di database / sheet DATA CUSTOMER
-    fun insertCargo(item: CargoItemEntity) = viewModelScope.launch {
-        dao.insertCargo(item)
+    // REVISI LOGIKA: Validasi data duplikat dengan No. PTI berbeda
+    fun insertCargo(item: CargoItemEntity, onSuccess: () -> Unit) = viewModelScope.launch {
+        val cleanDesc = item.description.trim()
+        val cleanCust = item.customerName.trim()
+        val cleanPag = item.pagNo?.trim()
+
+        // Cari apakah sudah ada barang dengan Deskripsi, Customer, dan PAG yang sama
+        val duplicateItem = dao.findCargoByDescAndCustomer(
+            manifestNo = item.manifestOwnerNo,
+            description = cleanDesc,
+            customerName = cleanCust,
+            pagNo = cleanPag
+        )
+
+        if (duplicateItem != null && !duplicateItem.ptiNo.equals(item.ptiNo.trim(), ignoreCase = true)) {
+            // Jika data sama tetapi No. PTI beda, batalkan simpan dan kirim pesan error
+            _uiEvent.emit("Gagal Simpan: Barang ($cleanDesc) untuk customer ($cleanCust) sudah terdaftar dengan No. PTI (${duplicateItem.ptiNo})!")
+        } else {
+            // Jika validasi lolos, simpan data dan jalankan callback success
+            dao.insertCargo(item)
+            onSuccess()
+        }
     }
 
-    // Fungsi untuk memperbarui data cargo setelah diedit dari dialog edit
     fun updateCargoItem(item: CargoItemEntity) = viewModelScope.launch {
         dao.updateCargo(item)
     }
@@ -77,8 +102,8 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
             val items by viewModel.getCargoItems(defaultManifestNo).collectAsState(initial = emptyList())
             CargoInputScreen(
                 existingItems = items,
-                onSave = { item ->
-                    viewModel.insertCargo(item)
+                viewModel = viewModel,
+                onSaveSuccess = {
                     navController.popBackStack()
                 }
             )
@@ -115,8 +140,21 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
 @Composable
 fun CargoInputScreen(
     existingItems: List<CargoItemEntity> = emptyList(),
-    onSave: (CargoItemEntity) -> Unit
+    viewModel: CargoViewModel,
+    onSaveSuccess: () -> Unit
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Dengerin event pesan peringatan/error dari ViewModel
+    LaunchedEffect(Unit) {
+        viewModel.uiEvent.collect { errorMessage ->
+            snackbarHostState.showSnackbar(
+                message = errorMessage,
+                duration = SnackbarDuration.Long
+            )
+        }
+    }
+
     // Logika Otomatisasi Nomor Urut PTI Terakhir
     val autoPtiNumber = remember(existingItems) {
         if (existingItems.isEmpty()) {
@@ -163,22 +201,25 @@ fun CargoInputScreen(
         }
 
         if (finalPtiNo.isNotBlank()) {
-            onSave(
-                CargoItemEntity(
-                    manifestOwnerNo = "MYI-KAL/100716/XII/2025",
-                    ptiNo = finalPtiNo,
-                    pagNo = finalPagNo,
-                    pcsCly = pcs,
-                    weightPerPcs = null,
-                    subTotalWeight = weight,
-                    description = description.trim().uppercase(),
-                    customerName = customerName.trim().uppercase()
-                )
+            val newItem = CargoItemEntity(
+                manifestOwnerNo = "MYI-KAL/100716/XII/2025",
+                ptiNo = finalPtiNo,
+                pagNo = finalPagNo,
+                pcsCly = pcs,
+                weightPerPcs = null,
+                subTotalWeight = weight,
+                description = description.trim().uppercase(),
+                customerName = customerName.trim().uppercase()
             )
+
+            viewModel.insertCargo(newItem, onSuccess = onSaveSuccess)
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Input Cargo Baru") }) }) { padding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = { TopAppBar(title = { Text("Input Cargo Baru") }) }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -190,7 +231,6 @@ fun CargoInputScreen(
                 onValueChange = { input ->
                     ptiNo = input.uppercase()
 
-                    // Jika No. PTI diisi manual dan cocok dengan data lama, auto-fill Customer
                     val cleanInputPti = if (input.uppercase().startsWith("KAL")) input.uppercase() else "KAL${input.uppercase()}"
                     val match = existingItems.find { 
                         it.ptiNo.equals(cleanInputPti.trim(), ignoreCase = true) ||
@@ -235,16 +275,13 @@ fun CargoInputScreen(
                     val upperInput = input.uppercase()
                     customerName = upperInput
 
-                    // Deteksi jika Customer sudah pernah diinput sebelumnya
                     val existingCustomer = existingItems.find { 
                         it.customerName.trim().equals(upperInput.trim(), ignoreCase = true) 
                     }
 
                     if (existingCustomer != null) {
-                        // Jika Customer sudah ada, samakan No. PTI dengan data terdahulu
                         ptiNo = existingCustomer.ptiNo.removePrefix("KAL")
                     } else {
-                        // Jika Customer baru/berbeda, kembalikan ke nomor urut PTI otomatis berikutnya
                         ptiNo = autoPtiNumber
                     }
                 },
