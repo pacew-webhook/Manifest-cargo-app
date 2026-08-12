@@ -21,6 +21,15 @@ import androidx.compose.ui.unit.dp
 import com.example.cargostowing.data.CargoItemEntity
 import com.example.cargostowing.util.CargoExporter
 
+// Helper function untuk format berat tanpa .0 jika bulat
+fun formatWeight(weight: Double): String {
+    return if (weight % 1.0 == 0.0) {
+        weight.toLong().toString()
+    } else {
+        weight.toString()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StowingChecklistScreen(
@@ -103,7 +112,7 @@ fun StowingChecklistScreen(
                             )
                         }
                         Text(
-                            text = "${item.subTotalWeight} Kg",
+                            text = "${formatWeight(item.subTotalWeight)} Kg",
                             style = MaterialTheme.typography.bodyLarge
                         )
                         IconButton(onClick = { itemToEdit = item }) {
@@ -143,7 +152,7 @@ fun EditCargoDialog(
     var customerName by remember { mutableStateOf(item.customerName) }
     var description by remember { mutableStateOf(item.description) }
     var pcsStr by remember { mutableStateOf(item.pcsCly.toString()) }
-    var weightStr by remember { mutableStateOf(item.subTotalWeight.toString()) }
+    var weightStr by remember { mutableStateOf(formatWeight(item.subTotalWeight)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -219,4 +228,3 @@ fun EditCargoDialog(
         }
     )
 }
-
