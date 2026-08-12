@@ -40,8 +40,27 @@ sealed class Screen(val route: String) {
 
 class CargoViewModel(private val dao: CargoDao) : ViewModel() {
     fun getCargoItems(manifestNo: String): Flow<List<CargoItemEntity>> = dao.getCargoByManifest(manifestNo)
-    fun insertCargo(item: CargoItemEntity) = viewModelScope.launch { dao.insertCargo(item) }
-    fun updateStowStatus(id: Long, isStowed: Boolean) = viewModelScope.launch { dao.updateStowStatus(id, isStowed) }
+
+    fun insertCargo(item: CargoItemEntity) = viewModelScope.launch {
+        val existing = dao.findCargoByDescAndCustomer(
+            manifestNo = item.manifestOwnerNo,
+            description = item.description,
+            customerName = item.customerName
+        )
+        if (existing != null) {
+            val updated = existing.copy(
+                pcsCly = existing.pcsCly + item.pcsCly,
+                subTotalWeight = existing.subTotalWeight + item.subTotalWeight
+            )
+            dao.updateCargo(updated)
+        } else {
+            dao.insertCargo(item)
+        }
+    }
+
+    fun updateStowStatus(id: Long, isStowed: Boolean) = viewModelScope.launch {
+        dao.updateStowStatus(id, isStowed)
+    }
 }
 
 @Composable
