@@ -3,6 +3,7 @@ package com.example.cargostowing.ui
 import java.net.URLEncoder
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,7 +56,6 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
 
     fun getCargoItems(manifestNo: String): Flow<List<CargoItemEntity>> = dao.getCargoByManifest(manifestNo)
 
-    // FUNGSI BARU: Menggabungkan item berdasarkan PAG yang sama untuk layar Stowing Checklist
     fun getGroupedStowingItems(manifestNo: String): Flow<List<CargoItemEntity>> {
         return dao.getCargoByManifest(manifestNo).map { items ->
             items.groupBy { it.pagNo?.trim()?.uppercase() ?: "" }
@@ -93,7 +93,7 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
             pagNo = cleanPag
         )
 
-        if (duplicateItem != null && !duplicateItem.ptiNo.equals(item.ptiNo.trim(), ignoreCase = true)) {
+        if (duplicateItem != null && duplicateItem.id != item.id && !duplicateItem.ptiNo.equals(item.ptiNo.trim(), ignoreCase = true)) {
             _uiEvent.emit("Gagal Simpan: Barang ($cleanDesc) untuk customer ($cleanCust) sudah terdaftar dengan No. PTI (${duplicateItem.ptiNo})!")
         } else {
             dao.insertCargo(item)
@@ -156,7 +156,6 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
                 rawManifestNo
             }
             
-            // Menggunakan data yang sudah digabungkan berdasarkan PAG
             val items by viewModel.getGroupedStowingItems(manifestNo).collectAsState(initial = emptyList())
             
             StowingChecklistScreen(
@@ -199,12 +198,18 @@ fun CargoInputScreen(
         }
     }
 
-    var ptiNo by remember(autoPtiNumber) { mutableStateOf(autoPtiNumber) }
+    var editingItemId by remember { mutableStateOf<Long?>(null) }
+    var ptiNo by remember(autoPtiNumber, editingItemId) { 
+        mutableStateOf(if (editingItemId == null) autoPtiNumber else "") 
+    }
     var pagNo by remember { mutableStateOf("") }
     var customerName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var pcsStr by remember { mutableStateOf("") }
     var weightStr by remember { mutableStateOf("") }
+
+    // State untuk Dialog Konfirmasi Hapus
+    var itemToDelete by remember { mutableStateOf<CargoItemEntity?>(null) }
 
     val focusPag = remember { FocusRequester() }
     val focusCustomer = remember { FocusRequester() }
@@ -214,7 +219,10 @@ fun CargoInputScreen(
     val focusManager = LocalFocusManager.current
 
     val clearFields = {
+        editingItemId = null
+        ptiNo = autoPtiNumber
         pagNo = ""
+        customerName = ""
         description = ""
         pcsStr = ""
         weightStr = ""
@@ -240,6 +248,7 @@ fun CargoInputScreen(
 
         if (finalPtiNo.isNotBlank()) {
             val newItem = CargoItemEntity(
+                id = editingItemId ?: 0L,
                 manifestOwnerNo = "MYI-KAL/100716/XII/2025",
                 ptiNo = finalPtiNo,
                 pagNo = finalPagNo,
@@ -259,7 +268,7 @@ fun CargoInputScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopAppBar(title = { Text("Input Cargo Baru") }) }
+        topBar = { TopAppBar(title = { Text(if (editingItemId == null) "Input Cargo Baru" else "Edit Item Cargo") }) }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -278,7 +287,7 @@ fun CargoInputScreen(
                             it.ptiNo.equals(cleanInputPti.trim(), ignoreCase = true) ||
                             it.ptiNo.removePrefix("KAL").equals(input.trim(), ignoreCase = true)
                         }
-                        if (match != null && customerName.isBlank()) {
+                        if (match != null && customerName.isBlank() && editingItemId == null) {
                             customerName = match.customerName
                         }
                     },
@@ -325,9 +334,9 @@ fun CargoInputScreen(
                             it.customerName.trim().equals(upperInput.trim(), ignoreCase = true) 
                         }
 
-                        if (existingCustomer != null) {
+                        if (existingCustomer != null && editingItemId == null) {
                             ptiNo = existingCustomer.ptiNo.removePrefix("KAL")
-                        } else {
+                        } else if (editingItemId == null) {
                             ptiNo = autoPtiNumber
                         }
                     },
@@ -399,17 +408,28 @@ fun CargoInputScreen(
             }
 
             item {
-                Button(
-                    onClick = submitAction,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Simpan Item Cargo") }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (editingItemId != null) {
+                        OutlinedButton(
+                            onClick = { clearFields() },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Batal") }
+                    }
+                    Button(
+                        onClick = submitAction,
+                        modifier = Modifier.weight(1f)
+                    ) { Text(if (editingItemId == null) "Simpan Item Cargo" else "Update Item") }
+                }
             }
 
             if (existingItems.isNotEmpty()) {
                 item {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     Text(
-                        "Daftar Item Cargo / Stowing",
+                        "Daftar Item Cargo / Stowing (Ketuk untuk Edit)",
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )
@@ -417,7 +437,17 @@ fun CargoInputScreen(
 
                 items(existingItems) { item ->
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                editingItemId = item.id
+                                ptiNo = item.ptiNo.removePrefix("KAL")
+                                pagNo = item.pagNo?.removePrefix("PAG ") ?: ""
+                                customerName = item.customerName
+                                description = item.description
+                                pcsStr = item.pcsCly.toString()
+                                weightStr = item.subTotalWeight.toString()
+                            },
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
@@ -462,7 +492,7 @@ fun CargoInputScreen(
                                     fontSize = 14.sp,
                                     modifier = Modifier.padding(end = 8.dp)
                                 )
-                                IconButton(onClick = { viewModel.deleteCargoItem(item) }) {
+                                IconButton(onClick = { itemToDelete = item }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
                                 }
                             }
@@ -471,5 +501,32 @@ fun CargoInputScreen(
                 }
             }
         }
+    }
+
+    // Dialog Konfirmasi Hapus
+    if (itemToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            title = { Text("Konfirmasi Hapus") },
+            text = { Text("Apakah Anda yakin ingin menghapus item cargo dengan No. PTI (${itemToDelete?.ptiNo})?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        itemToDelete?.let { viewModel.deleteCargoItem(it) }
+                        if (editingItemId == itemToDelete?.id) {
+                            clearFields()
+                        }
+                        itemToDelete = null
+                    }
+                ) {
+                    Text("Hapus", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 }
