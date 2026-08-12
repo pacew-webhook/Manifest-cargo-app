@@ -34,6 +34,7 @@ import com.example.cargostowing.data.CargoItemEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -53,6 +54,32 @@ class CargoViewModel(private val dao: CargoDao) : ViewModel() {
     val uiEvent = _uiEvent.asSharedFlow()
 
     fun getCargoItems(manifestNo: String): Flow<List<CargoItemEntity>> = dao.getCargoByManifest(manifestNo)
+
+    // FUNGSI BARU: Menggabungkan item berdasarkan PAG yang sama untuk layar Stowing Checklist
+    fun getGroupedStowingItems(manifestNo: String): Flow<List<CargoItemEntity>> {
+        return dao.getCargoByManifest(manifestNo).map { items ->
+            items.groupBy { it.pagNo?.trim()?.uppercase() ?: "" }
+                .flatMap { (pag, groupItems) ->
+                    if (pag.isBlank()) {
+                        groupItems
+                    } else {
+                        val first = groupItems.first()
+                        val combinedDesc = groupItems.joinToString(", ") { it.description }.uppercase()
+                        val totalPcs = groupItems.sumOf { it.pcsCly }
+                        val totalWeight = groupItems.sumOf { it.subTotalWeight }
+                        
+                        listOf(
+                            first.copy(
+                                description = combinedDesc,
+                                pcsCly = totalPcs,
+                                subTotalWeight = totalWeight,
+                                isStowed = groupItems.all { it.isStowed }
+                            )
+                        )
+                    }
+                }
+        }
+    }
 
     fun insertCargo(item: CargoItemEntity, onSuccess: () -> Unit) = viewModelScope.launch {
         val cleanDesc = item.description.trim()
@@ -128,7 +155,9 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
             } catch (e: Exception) {
                 rawManifestNo
             }
-            val items by viewModel.getCargoItems(manifestNo).collectAsState(initial = emptyList())
+            
+            // Menggunakan data yang sudah digabungkan berdasarkan PAG
+            val items by viewModel.getGroupedStowingItems(manifestNo).collectAsState(initial = emptyList())
             
             StowingChecklistScreen(
                 manifestNo = manifestNo,
