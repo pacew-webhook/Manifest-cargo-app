@@ -133,12 +133,27 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
     val submitAction = {
         val pcs = pcsStr.toIntOrNull() ?: 0
         val weight = weightStr.toDoubleOrNull() ?: 0.0
-        if (ptiNo.isNotBlank()) {
+
+        val cleanPti = ptiNo.trim().uppercase()
+        val finalPtiNo = when {
+            cleanPti.isBlank() -> ""
+            cleanPti.startsWith("KAL") -> cleanPti
+            else -> "KAL$cleanPti"
+        }
+
+        val cleanPag = pagNo.trim().uppercase()
+        val finalPagNo = when {
+            cleanPag.isBlank() -> null
+            cleanPag.startsWith("PAG") -> cleanPag
+            else -> "PAG $cleanPag"
+        }
+
+        if (finalPtiNo.isNotBlank()) {
             onSave(
                 CargoItemEntity(
                     manifestOwnerNo = "MYI-KAL/100716/XII/2025",
-                    ptiNo = ptiNo.trim().uppercase(),
-                    pagNo = pagNo.trim().uppercase().ifBlank { null },
+                    ptiNo = finalPtiNo,
+                    pagNo = finalPagNo,
                     pcsCly = pcs,
                     weightPerPcs = null,
                     subTotalWeight = weight,
@@ -160,18 +175,23 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
                 value = ptiNo,
                 onValueChange = { ptiNo = it.uppercase() },
                 label = { Text("No. PTI") },
+                prefix = { Text("KAL") },
+                placeholder = { Text("001") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Characters,
+                    keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Next
                 ),
                 keyboardActions = KeyboardActions(onNext = { focusPag.requestFocus() }),
                 modifier = Modifier.fillMaxWidth()
             )
+
             OutlinedTextField(
                 value = pagNo,
                 onValueChange = { pagNo = it.uppercase() },
                 label = { Text("No. PAG (Opsional)") },
+                prefix = { Text("PAG ") },
+                placeholder = { Text("002 MYI") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Characters,
@@ -182,6 +202,7 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
                     .fillMaxWidth()
                     .focusRequester(focusPag)
             )
+
             OutlinedTextField(
                 value = customerName,
                 onValueChange = { customerName = it.uppercase() },
@@ -196,6 +217,7 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
                     .fillMaxWidth()
                     .focusRequester(focusCustomer)
             )
+
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it.uppercase() },
@@ -210,6 +232,7 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
                     .fillMaxWidth()
                     .focusRequester(focusDesc)
             )
+
             OutlinedTextField(
                 value = pcsStr,
                 onValueChange = { pcsStr = it },
@@ -224,6 +247,7 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
                     .fillMaxWidth()
                     .focusRequester(focusPcs)
             )
+
             OutlinedTextField(
                 value = weightStr,
                 onValueChange = { weightStr = it },
