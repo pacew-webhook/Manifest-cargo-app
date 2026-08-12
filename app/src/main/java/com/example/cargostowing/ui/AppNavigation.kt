@@ -10,7 +10,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -110,9 +109,7 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
             CargoInputScreen(
                 existingItems = items,
                 viewModel = viewModel,
-                onSaveSuccess = {
-                    // Berada tetap di halaman untuk lanjut input/melihat list
-                }
+                onSaveSuccess = { }
             )
         }
 
@@ -379,7 +376,6 @@ fun CargoInputScreen(
                 ) { Text("Simpan Item Cargo") }
             }
 
-            // DAFTAR ITEM CARGO / CEKLIS STOWING DI BAWAH TOMBOL SIMPAN
             if (existingItems.isNotEmpty()) {
                 item {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
