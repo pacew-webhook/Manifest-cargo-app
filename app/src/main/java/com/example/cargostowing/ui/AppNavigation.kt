@@ -87,10 +87,14 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
         }
 
         composable(Screen.CargoInput.route) {
-            CargoInputScreen(onSave = { item ->
-                viewModel.insertCargo(item)
-                navController.popBackStack()
-            })
+            val items by viewModel.getCargoItems(defaultManifestNo).collectAsState(initial = emptyList())
+            CargoInputScreen(
+                existingItems = items,
+                onSave = { item ->
+                    viewModel.insertCargo(item)
+                    navController.popBackStack()
+                }
+            )
         }
 
         composable(
@@ -122,8 +126,24 @@ fun AppNavHost(navController: NavHostController, viewModel: CargoViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
-    var ptiNo by remember { mutableStateOf("") }
+fun CargoInputScreen(
+    existingItems: List<CargoItemEntity> = emptyList(),
+    onSave: (CargoItemEntity) -> Unit
+) {
+    // Logika Otomatisasi Nomor Urut PTI Terakhir
+    val autoPtiNumber = remember(existingItems) {
+        if (existingItems.isEmpty()) {
+            "001"
+        } else {
+            val maxNum = existingItems.mapNotNull { item ->
+                item.ptiNo.replace("[^0-9]".toRegex(), "").toIntOrNull()
+            }.maxOrNull() ?: existingItems.size
+            
+            String.format("%03d", maxNum + 1)
+        }
+    }
+
+    var ptiNo by remember(autoPtiNumber) { mutableStateOf(autoPtiNumber) }
     var pagNo by remember { mutableStateOf("") }
     var customerName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -180,7 +200,19 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
         ) {
             OutlinedTextField(
                 value = ptiNo,
-                onValueChange = { ptiNo = it.uppercase() },
+                onValueChange = { input ->
+                    ptiNo = input.uppercase()
+
+                    // Jika No. PTI diisi manual dan cocok dengan data lama, auto-fill Customer
+                    val cleanInputPti = if (input.uppercase().startsWith("KAL")) input.uppercase() else "KAL${input.uppercase()}"
+                    val match = existingItems.find { 
+                        it.ptiNo.equals(cleanInputPti.trim(), ignoreCase = true) ||
+                        it.ptiNo.removePrefix("KAL").equals(input.trim(), ignoreCase = true)
+                    }
+                    if (match != null && customerName.isBlank()) {
+                        customerName = match.customerName
+                    }
+                },
                 label = { Text("No. PTI") },
                 prefix = { Text("KAL") },
                 placeholder = { Text("001") },
@@ -212,7 +244,23 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
 
             OutlinedTextField(
                 value = customerName,
-                onValueChange = { customerName = it.uppercase() },
+                onValueChange = { input ->
+                    val upperInput = input.uppercase()
+                    customerName = upperInput
+
+                    // Deteksi jika Customer sudah pernah diinput sebelumnya
+                    val existingCustomer = existingItems.find { 
+                        it.customerName.trim().equals(upperInput.trim(), ignoreCase = true) 
+                    }
+
+                    if (existingCustomer != null) {
+                        // Jika Customer sudah ada, samakan No. PTI dengan data terdahulu
+                        ptiNo = existingCustomer.ptiNo.removePrefix("KAL")
+                    } else {
+                        // Jika Customer baru/berbeda, kembalikan ke nomor urut PTI otomatis berikutnya
+                        ptiNo = autoPtiNumber
+                    }
+                },
                 label = { Text("Nama Customer") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
