@@ -199,16 +199,40 @@ fun CargoInputScreen(
     }
 
     var editingItemId by remember { mutableStateOf<Long?>(null) }
-    var ptiNo by remember(autoPtiNumber, editingItemId) { 
-        mutableStateOf(if (editingItemId == null) autoPtiNumber else "") 
-    }
+    var ptiNo by remember { mutableStateOf(autoPtiNumber) }
     var pagNo by remember { mutableStateOf("") }
     var customerName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var pcsStr by remember { mutableStateOf("") }
     var weightStr by remember { mutableStateOf("") }
 
-    // State untuk Dialog Konfirmasi Hapus
+    LaunchedEffect(editingItemId, autoPtiNumber) {
+        if (editingItemId == null) {
+            ptiNo = autoPtiNumber
+            pagNo = ""
+            customerName = ""
+            description = ""
+            pcsStr = ""
+            weightStr = ""
+        } else {
+            val item = existingItems.find { it.id == editingItemId }
+            if (item != null) {
+                ptiNo = item.ptiNo.removePrefix("KAL")
+                pagNo = item.pagNo?.removePrefix("PAG ") ?: ""
+                customerName = item.customerName
+                description = item.description
+                pcsStr = item.pcsCly.toString()
+                
+                // Format agar tidak ada .0 jika nilai bulat
+                weightStr = if (item.subTotalWeight % 1.0 == 0.0) {
+                    item.subTotalWeight.toLong().toString()
+                } else {
+                    item.subTotalWeight.toString()
+                }
+            }
+        }
+    }
+
     var itemToDelete by remember { mutableStateOf<CargoItemEntity?>(null) }
 
     val focusPag = remember { FocusRequester() }
@@ -220,12 +244,6 @@ fun CargoInputScreen(
 
     val clearFields = {
         editingItemId = null
-        ptiNo = autoPtiNumber
-        pagNo = ""
-        customerName = ""
-        description = ""
-        pcsStr = ""
-        weightStr = ""
     }
 
     val submitAction = {
@@ -436,17 +454,18 @@ fun CargoInputScreen(
                 }
 
                 items(existingItems) { item ->
+                    // Memformat tampilan berat agar menghilangkan .0 jika bilangan bulat
+                    val displayWeight = if (item.subTotalWeight % 1.0 == 0.0) {
+                        "${item.subTotalWeight.toLong()} Kg"
+                    } else {
+                        "${item.subTotalWeight} Kg"
+                    }
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
                                 editingItemId = item.id
-                                ptiNo = item.ptiNo.removePrefix("KAL")
-                                pagNo = item.pagNo?.removePrefix("PAG ") ?: ""
-                                customerName = item.customerName
-                                description = item.description
-                                pcsStr = item.pcsCly.toString()
-                                weightStr = item.subTotalWeight.toString()
                             },
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -487,7 +506,7 @@ fun CargoInputScreen(
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "${item.subTotalWeight} Kg",
+                                    displayWeight,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     modifier = Modifier.padding(end = 8.dp)
@@ -503,7 +522,6 @@ fun CargoInputScreen(
         }
     }
 
-    // Dialog Konfirmasi Hapus
     if (itemToDelete != null) {
         AlertDialog(
             onDismissRequest = { itemToDelete = null },
@@ -529,4 +547,4 @@ fun CargoInputScreen(
             }
         )
     }
-}
+}                      
