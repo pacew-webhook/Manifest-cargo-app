@@ -27,7 +27,7 @@ class CargoExporter(private val context: Context) {
 
         val sheet = workbook.getSheet("Manifest") ?: workbook.getSheetAt(0)
 
-        // Isi Header Informasi Flight & Manifest
+        // Header Flight & Manifest
         val row6 = sheet.getRow(6) ?: sheet.createRow(6)
         (row6.getCell(0) ?: row6.createCell(0)).setCellValue(manifestNo)
 
@@ -38,12 +38,22 @@ class CargoExporter(private val context: Context) {
         val row8 = sheet.getRow(8) ?: sheet.createRow(8)
         (row8.getCell(6) ?: row8.createCell(6)).setCellValue(": $flightNo")
 
-        // Isi Baris Data Kargo (Mulai dari Baris Excel 14 / Index 13)
-        cargoItems.forEachIndexed { i, item ->
+        // Penggabungan data (Grouping) berdasarkan Description dan CustomerName
+        val groupedItems = cargoItems.groupBy {
+            Pair(it.description.uppercase().trim(), it.customerName.uppercase().trim())
+        }.map { (_, items) ->
+            items.first().copy(
+                pcsCly = items.sumOf { it.pcsCly },
+                subTotalWeight = items.sumOf { it.subTotalWeight }
+            )
+        }
+
+        // Tulis Data Hasil Penggabungan ke Excel
+        groupedItems.forEachIndexed { i, item ->
             val rowIndex = 13 + i
             val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
 
-            // Kolom Sisi Manifest (Kiri)
+            // Sisi Manifest (Kiri)
             (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble())
             (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)
             (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble())
@@ -51,7 +61,7 @@ class CargoExporter(private val context: Context) {
             (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)
             (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)
 
-            // Kolom Sisi Stowing Checklist (Kanan)
+            // Sisi Stowing Checklist (Kanan)
             (row.getCell(7) ?: row.createCell(7)).setCellValue((i + 1).toDouble())
             if (!item.pagNo.isNullOrEmpty()) {
                 (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo)
