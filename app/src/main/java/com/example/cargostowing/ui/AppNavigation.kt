@@ -4,9 +4,17 @@ import java.net.URLEncoder
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -94,32 +102,111 @@ fun CargoInputScreen(onSave: (CargoItemEntity) -> Unit) {
     var pcsStr by remember { mutableStateOf("") }
     var weightStr by remember { mutableStateOf("") }
 
+    val focusCustomer = remember { FocusRequester() }
+    val focusDesc = remember { FocusRequester() }
+    val focusPcs = remember { FocusRequester() }
+    val focusWeight = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+
+    val submitAction = {
+        val pcs = pcsStr.toIntOrNull() ?: 0
+        val weight = weightStr.toDoubleOrNull() ?: 0.0
+        if (ptiNo.isNotBlank()) {
+            onSave(
+                CargoItemEntity(
+                    manifestOwnerNo = "MYI-KAL/100716/XII/2025",
+                    ptiNo = ptiNo.uppercase(),
+                    pcsCly = pcs,
+                    weightPerPcs = null,
+                    subTotalWeight = weight,
+                    description = description.uppercase(),
+                    customerName = customerName.uppercase()
+                )
+            )
+        }
+    }
+
     Scaffold(topBar = { TopAppBar(title = { Text("Input Cargo Baru") }) }) { padding ->
-        Column(modifier = Modifier.padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(value = ptiNo, onValueChange = { ptiNo = it }, label = { Text("No. PTI") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = customerName, onValueChange = { customerName = it }, label = { Text("Nama Customer") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Deskripsi Barang") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = pcsStr, onValueChange = { pcsStr = it }, label = { Text("Pcs / Cly") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = weightStr, onValueChange = { weightStr = it }, label = { Text("Berat Total (Kg)") }, modifier = Modifier.fillMaxWidth())
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedTextField(
+                value = ptiNo,
+                onValueChange = { ptiNo = it.uppercase() },
+                label = { Text("No. PTI") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(onNext = { focusCustomer.requestFocus() }),
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = customerName,
+                onValueChange = { customerName = it.uppercase() },
+                label = { Text("Nama Customer") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(onNext = { focusDesc.requestFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusCustomer)
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it.uppercase() },
+                label = { Text("Deskripsi Barang") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(onNext = { focusPcs.requestFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusDesc)
+            )
+            OutlinedTextField(
+                value = pcsStr,
+                onValueChange = { pcsStr = it },
+                label = { Text("Pcs / Cly") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(onNext = { focusWeight.requestFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusPcs)
+            )
+            OutlinedTextField(
+                value = weightStr,
+                onValueChange = { weightStr = it },
+                label = { Text("Berat Total (Kg)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = {
+                    focusManager.clearFocus()
+                    submitAction()
+                }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusWeight)
+            )
 
             Button(
-                onClick = {
-                    val pcs = pcsStr.toIntOrNull() ?: 0
-                    val weight = weightStr.toDoubleOrNull() ?: 0.0
-                    if (ptiNo.isNotBlank()) {
-                        onSave(
-                            CargoItemEntity(
-                                manifestOwnerNo = "MYI-KAL/100716/XII/2025",
-                                ptiNo = ptiNo,
-                                pcsCly = pcs,
-                                weightPerPcs = null,
-                                subTotalWeight = weight,
-                                description = description,
-                                customerName = customerName
-                            )
-                        )
-                    }
-                },
+                onClick = submitAction,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Simpan Item Cargo") }
         }
