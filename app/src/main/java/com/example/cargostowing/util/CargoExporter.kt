@@ -38,9 +38,13 @@ class CargoExporter(private val context: Context) {
         val row8 = sheet.getRow(8) ?: sheet.createRow(8)
         (row8.getCell(6) ?: row8.createCell(6)).setCellValue(": $flightNo")
 
-        // Penggabungan data (Grouping) berdasarkan Description dan CustomerName
+        // Grouping berdasarkan Description, Customer, dan No PAG
         val groupedItems = cargoItems.groupBy {
-            Pair(it.description.uppercase().trim(), it.customerName.uppercase().trim())
+            Triple(
+                it.description.uppercase().trim(),
+                it.customerName.uppercase().trim(),
+                it.pagNo?.uppercase()?.trim() ?: ""
+            )
         }.map { (_, items) ->
             items.first().copy(
                 pcsCly = items.sumOf { it.pcsCly },
@@ -62,13 +66,12 @@ class CargoExporter(private val context: Context) {
             (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)
 
             // Sisi Stowing Checklist (Kanan)
-            (row.getCell(7) ?: row.createCell(7)).setCellValue((i + 1).toDouble())
             if (!item.pagNo.isNullOrEmpty()) {
-                (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo)
+                (row.getCell(7) ?: row.createCell(7)).setCellValue(item.pagNo)
             }
-            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
-            (row.getCell(10) ?: row.createCell(10)).setCellValue(item.subTotalWeight)
-            (row.getCell(12) ?: row.createCell(12)).setCellValue(item.customerName)
+            (row.getCell(8) ?: row.createCell(8)).setCellValue(item.description)
+            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.subTotalWeight)
+            (row.getCell(11) ?: row.createCell(11)).setCellValue(item.customerName)
         }
 
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
@@ -87,7 +90,7 @@ class CargoExporter(private val context: Context) {
         canvas.drawText("MANIFEST & STOWING CHECKLIST - $manifestNo", 40f, 50f, paint)
         var y = 90f
         items.forEach {
-            canvas.drawText("${it.ptiNo} | ${it.customerName} | ${it.description} | ${it.subTotalWeight} Kg | Status: ${if (it.isStowed) "STOWED" else "PENDING"}", 40f, y, paint)
+            canvas.drawText("${it.ptiNo} | PAG: ${it.pagNo ?: "-"} | ${it.customerName} | ${it.description} | ${it.subTotalWeight} Kg | Status: ${if (it.isStowed) "STOWED" else "PENDING"}", 40f, y, paint)
             y += 20f
         }
 
