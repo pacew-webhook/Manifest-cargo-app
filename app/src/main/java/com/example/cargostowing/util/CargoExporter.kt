@@ -28,18 +28,18 @@ class CargoExporter(private val context: Context) {
         val sheet = workbook.getSheet("Manifest") ?: workbook.getSheetAt(0)
 
         // Header Manifest & Flight Info
-        val row7 = sheet.getRow(6) ?: sheet.createRow(6) // Row index 6 = Row 7 Excel
+        val row7 = sheet.getRow(6) ?: sheet.createRow(6)
         (row7.getCell(0) ?: row7.createCell(0)).setCellValue(manifestNo)
 
-        val row8 = sheet.getRow(7) ?: sheet.createRow(7) // Row index 7 = Row 8 Excel
+        val row8 = sheet.getRow(7) ?: sheet.createRow(7)
         (row8.getCell(2) ?: row8.createCell(2)).setCellValue(": $dateStr")
         (row8.getCell(6) ?: row8.createCell(6)).setCellValue(": $acReg")
 
-        val row9 = sheet.getRow(8) ?: sheet.createRow(8) // Row index 8 = Row 9 Excel
+        val row9 = sheet.getRow(8) ?: sheet.createRow(8)
         (row9.getCell(6) ?: row9.createCell(6)).setCellValue(": $flightNo")
 
         // -----------------------------------------------------------------
-        // 1. ISI SISI KIRI (MANIFEST CARGO) - Detail Per PTI (Baris 14 / Index 13)
+        // 1. MANIFEST CARGO (SISI KIRI) - Detail Per PTI
         // -----------------------------------------------------------------
         cargoItems.forEachIndexed { i, item ->
             val rowIndex = 13 + i
@@ -48,28 +48,23 @@ class CargoExporter(private val context: Context) {
             (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Kolom A: No
             (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Kolom B: PTI
             (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Kolom C: Pcs/Cly
-            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Sub Total Weight
+            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Weight Sub Total
             (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Kolom F: DESCRIPTION
             (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Kolom G: COSTUMERS
         }
 
         // -----------------------------------------------------------------
-        // 2. ISI SISI KANAN (STOWING CHECKLIST) - Grouping berdasarkan PAG/Deskripsi
+        // 2. STOWING CHECKLIST (SISI KANAN) - Memisah Baris Jika Nomor PAG Beda
         // -----------------------------------------------------------------
         val groupedStowingItems = cargoItems.groupBy {
-            Pair(
+            Triple(
+                it.pagNo?.trim()?.uppercase() ?: "",
                 it.description.trim().uppercase(),
                 it.customerName.trim().uppercase()
             )
         }.map { (_, items) ->
             val first = items.first()
-            val combinedPag = items.mapNotNull { it.pagNo?.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .joinToString(", ")
-
             first.copy(
-                pagNo = combinedPag.ifBlank { null },
                 pcsCly = items.sumOf { it.pcsCly },
                 subTotalWeight = items.sumOf { it.subTotalWeight }
             )
@@ -80,8 +75,7 @@ class CargoExporter(private val context: Context) {
             val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
 
             // Kolom I (Index 8) : NO PAG
-            val pagVal = item.pagNo ?: ""
-            (row.getCell(8) ?: row.createCell(8)).setCellValue(pagVal)
+            (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo ?: "")
 
             // Kolom J (Index 9) : DESCRIPTION
             (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
@@ -89,7 +83,7 @@ class CargoExporter(private val context: Context) {
             // Kolom K (Index 10): WEIGHT Net
             (row.getCell(10) ?: row.createCell(10)).setCellValue(item.subTotalWeight)
 
-            // Kolom L (Index 11): WEIGHT Gross (Opsional jika ingin menimpa rumus template)
+            // Kolom L (Index 11): WEIGHT Gross
             (row.getCell(11) ?: row.createCell(11)).setCellValue(item.subTotalWeight)
 
             // Kolom M (Index 12): COSTUMERS
