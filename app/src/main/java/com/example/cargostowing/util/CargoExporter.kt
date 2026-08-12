@@ -53,7 +53,7 @@ class CargoExporter(private val context: Context) {
 
             // Kolom Sisi Stowing Checklist (Kanan)
             (row.getCell(7) ?: row.createCell(7)).setCellValue((i + 1).toDouble())
-            if (!item.pagNo.isNull) {
+            if (!item.pagNo.isNullOrEmpty()) {
                 (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo)
             }
             (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
