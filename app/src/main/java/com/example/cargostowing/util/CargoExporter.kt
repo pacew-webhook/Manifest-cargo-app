@@ -27,43 +27,49 @@ class CargoExporter(private val context: Context) {
 
         val sheet = workbook.getSheet("Manifest") ?: workbook.getSheetAt(0)
 
-        // Header Flight & Manifest
-        val row6 = sheet.getRow(6) ?: sheet.createRow(6)
-        (row6.getCell(0) ?: row6.createCell(0)).setCellValue(manifestNo)
+        // Header Manifest & Flight Info
+        val row7 = sheet.getRow(6) ?: sheet.createRow(6) // Row index 6 = Row 7 Excel
+        (row7.getCell(0) ?: row7.createCell(0)).setCellValue(manifestNo)
 
-        val row7 = sheet.getRow(7) ?: sheet.createRow(7)
-        (row7.getCell(2) ?: row7.createCell(2)).setCellValue(": $dateStr")
-        (row7.getCell(6) ?: row7.createCell(6)).setCellValue(": $acReg")
+        val row8 = sheet.getRow(7) ?: sheet.createRow(7) // Row index 7 = Row 8 Excel
+        (row8.getCell(2) ?: row8.createCell(2)).setCellValue(": $dateStr")
+        (row8.getCell(6) ?: row8.createCell(6)).setCellValue(": $acReg")
 
-        val row8 = sheet.getRow(8) ?: sheet.createRow(8)
-        (row8.getCell(6) ?: row8.createCell(6)).setCellValue(": $flightNo")
+        val row9 = sheet.getRow(8) ?: sheet.createRow(8) // Row index 8 = Row 9 Excel
+        (row9.getCell(6) ?: row9.createCell(6)).setCellValue(": $flightNo")
 
         // -----------------------------------------------------------------
-        // 1. SISI MANIFEST (KIRI) - Rincian Per PTI
+        // 1. ISI SISI KIRI (MANIFEST CARGO) - Detail Per PTI (Baris 14 / Index 13)
         // -----------------------------------------------------------------
         cargoItems.forEachIndexed { i, item ->
             val rowIndex = 13 + i
             val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
 
-            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Index 0: No
-            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Index 1: PTI
-            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Index 2: Pcs/Cly
-            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Index 4: Sub Total Weight
-            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Index 5: DESCRIPTION
-            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Index 6: COSTUMER
+            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Kolom A: No
+            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Kolom B: PTI
+            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Kolom C: Pcs/Cly
+            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Sub Total Weight
+            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Kolom F: DESCRIPTION
+            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Kolom G: COSTUMERS
         }
 
         // -----------------------------------------------------------------
-        // 2. SISI STOWING CHECKLIST (KANAN) - Hasil Digabung Per PAG/Barang
+        // 2. ISI SISI KANAN (STOWING CHECKLIST) - Grouping berdasarkan PAG/Deskripsi
         // -----------------------------------------------------------------
         val groupedStowingItems = cargoItems.groupBy {
-            Triple(
-                it.pagNo?.trim()?.uppercase() ?: "",
+            Pair(
                 it.description.trim().uppercase(),
                 it.customerName.trim().uppercase()
             )
         }.map { (_, items) ->
-            items.first().copy(
+            val first = items.first()
+            val combinedPag = items.mapNotNull { it.pagNo?.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .joinToString(", ")
+
+            first.copy(
+                pagNo = combinedPag.ifBlank { null },
                 pcsCly = items.sumOf { it.pcsCly },
                 subTotalWeight = items.sumOf { it.subTotalWeight }
             )
@@ -73,23 +79,20 @@ class CargoExporter(private val context: Context) {
             val rowIndex = 13 + i
             val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
 
-            // Index 7: NO PAG
-            if (!item.pagNo.isNullOrBlank()) {
-                (row.getCell(7) ?: row.createCell(7)).setCellValue(item.pagNo)
-            } else {
-                (row.getCell(7) ?: row.createCell(7)).setCellValue("")
-            }
+            // Kolom I (Index 8) : NO PAG
+            val pagVal = item.pagNo ?: ""
+            (row.getCell(8) ?: row.createCell(8)).setCellValue(pagVal)
 
-            // Index 8: DESCRIPTION
-            (row.getCell(8) ?: row.createCell(8)).setCellValue(item.description)
+            // Kolom J (Index 9) : DESCRIPTION
+            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
 
-            // Index 9: WEIGHT (Kg) Net
-            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.subTotalWeight)
-
-            // Index 10: WEIGHT (Kg) Gross
+            // Kolom K (Index 10): WEIGHT Net
             (row.getCell(10) ?: row.createCell(10)).setCellValue(item.subTotalWeight)
 
-            // Index 12: COSTUMERS
+            // Kolom L (Index 11): WEIGHT Gross (Opsional jika ingin menimpa rumus template)
+            (row.getCell(11) ?: row.createCell(11)).setCellValue(item.subTotalWeight)
+
+            // Kolom M (Index 12): COSTUMERS
             (row.getCell(12) ?: row.createCell(12)).setCellValue(item.customerName)
         }
 
