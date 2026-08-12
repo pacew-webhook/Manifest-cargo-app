@@ -25,42 +25,28 @@ class CargoExporter(private val context: Context) {
             XSSFWorkbook()
         }
 
-        val sheet = workbook.getSheet("Manifest") ?: workbook.getSheetAt(0)
+        // =================================================================
+        // 1. SHEET "Manifest" (DATA DIGABUNG BILA PTI & CUSTOMER SAMA)
+        // =================================================================
+        val manifestSheet = workbook.getSheet("Manifest") ?: workbook.getSheetAt(0)
 
         // Header Manifest & Flight Info
-        val row7 = sheet.getRow(6) ?: sheet.createRow(6)
+        val row7 = manifestSheet.getRow(6) ?: manifestSheet.createRow(6)
         (row7.getCell(0) ?: row7.createCell(0)).setCellValue(manifestNo)
 
-        val row8 = sheet.getRow(7) ?: sheet.createRow(7)
+        val row8 = manifestSheet.getRow(7) ?: manifestSheet.createRow(7)
         (row8.getCell(2) ?: row8.createCell(2)).setCellValue(": $dateStr")
         (row8.getCell(6) ?: row8.createCell(6)).setCellValue(": $acReg")
 
-        val row9 = sheet.getRow(8) ?: sheet.createRow(8)
+        val row9 = manifestSheet.getRow(8) ?: manifestSheet.createRow(8)
         (row9.getCell(6) ?: row9.createCell(6)).setCellValue(": $flightNo")
 
-        // -----------------------------------------------------------------
-        // 1. MANIFEST CARGO (SISI KIRI) - Detail Per PTI
-        // -----------------------------------------------------------------
-        cargoItems.forEachIndexed { i, item ->
-            val rowIndex = 13 + i
-            val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
-
-            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Kolom A: No
-            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Kolom B: PTI
-            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Kolom C: Pcs/Cly
-            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Weight Sub Total
-            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Kolom F: DESCRIPTION
-            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Kolom G: COSTUMERS
-        }
-
-        // -----------------------------------------------------------------
-        // 2. STOWING CHECKLIST (SISI KANAN) - Memisah Baris Jika Nomor PAG Beda
-        // -----------------------------------------------------------------
-        val groupedStowingItems = cargoItems.groupBy {
+        // Grouping berdasarkan PTI, Customer, dan Description
+        val groupedManifestItems = cargoItems.groupBy {
             Triple(
-                it.pagNo?.trim()?.uppercase() ?: "",
-                it.description.trim().uppercase(),
-                it.customerName.trim().uppercase()
+                it.ptiNo.trim().uppercase(),
+                it.customerName.trim().uppercase(),
+                it.description.trim().uppercase()
             )
         }.map { (_, items) ->
             val first = items.first()
@@ -70,26 +56,55 @@ class CargoExporter(private val context: Context) {
             )
         }
 
-        groupedStowingItems.forEachIndexed { i, item ->
+        // Tulis data gabungan ke Sheet Manifest
+        groupedManifestItems.forEachIndexed { i, item ->
             val rowIndex = 13 + i
-            val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
+            val row = manifestSheet.getRow(rowIndex) ?: manifestSheet.createRow(rowIndex)
 
-            // Kolom I (Index 8) : NO PAG
-            (row.getCell(8) ?: row.createCell(8)).setCellValue(item.pagNo ?: "")
-
-            // Kolom J (Index 9) : DESCRIPTION
-            (row.getCell(9) ?: row.createCell(9)).setCellValue(item.description)
-
-            // Kolom K (Index 10): WEIGHT Net
-            (row.getCell(10) ?: row.createCell(10)).setCellValue(item.subTotalWeight)
-
-            // Kolom L (Index 11): WEIGHT Gross
-            (row.getCell(11) ?: row.createCell(11)).setCellValue(item.subTotalWeight)
-
-            // Kolom M (Index 12): COSTUMERS
-            (row.getCell(12) ?: row.createCell(12)).setCellValue(item.customerName)
+            (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Kolom A: No
+            (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Kolom B: PTI
+            (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Kolom C: Pcs/Cly
+            (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Sub Total Weight
+            (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Kolom F: DESCRIPTION
+            (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Kolom G: COSTUMERS
         }
 
+        // =================================================================
+        // 2. SHEET "DATA CUSTOMER" (DATA DIPISAH PER INPUTAN ASLI)
+        // =================================================================
+        val customerSheet = if (workbook.numberOfSheets > 1) {
+            workbook.getSheet("DATA CUSTOMER") ?: workbook.getSheetAt(1)
+        } else {
+            workbook.getSheet("DATA CUSTOMER")
+        }
+
+        customerSheet?.let { sheet ->
+            // Header Info untuk Sheet Data Customer (jika ada struktur header yang sama)
+            val custRow7 = sheet.getRow(6) ?: sheet.createRow(6)
+            (custRow7.getCell(0) ?: custRow7.createCell(0)).setCellValue(manifestNo)
+
+            val custRow8 = sheet.getRow(7) ?: sheet.createRow(7)
+            (custRow8.getCell(2) ?: custRow8.createCell(2)).setCellValue(": $dateStr")
+            (custRow8.getCell(6) ?: custRow8.createCell(6)).setCellValue(": $acReg")
+
+            val custRow9 = sheet.getRow(8) ?: sheet.createRow(8)
+            (custRow9.getCell(6) ?: custRow9.createCell(6)).setCellValue(": $flightNo")
+
+            // Tulis data asli tanpa digabung
+            cargoItems.forEachIndexed { i, item ->
+                val rowIndex = 13 + i
+                val row = sheet.getRow(rowIndex) ?: sheet.createRow(rowIndex)
+
+                (row.getCell(0) ?: row.createCell(0)).setCellValue((i + 1).toDouble()) // Kolom A: No
+                (row.getCell(1) ?: row.createCell(1)).setCellValue(item.ptiNo)         // Kolom B: PTI
+                (row.getCell(2) ?: row.createCell(2)).setCellValue(item.pcsCly.toDouble()) // Kolom C: Pcs/Cly
+                (row.getCell(4) ?: row.createCell(4)).setCellValue(item.subTotalWeight) // Kolom E: Sub Total Weight
+                (row.getCell(5) ?: row.createCell(5)).setCellValue(item.description)   // Kolom F: DESCRIPTION
+                (row.getCell(6) ?: row.createCell(6)).setCellValue(item.customerName)  // Kolom G: COSTUMERS
+            }
+        }
+
+        // Simpan File
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
             workbook.write(outputStream)
         }
